@@ -19,7 +19,7 @@ class Language : public waybar::ALabel, public EventHandler {
   auto update() -> void override;
 
  private:
-  void onEvent(const std::string&) override;
+  void onEvent(const std::string_view&) override;
 
   void initLanguage();
 

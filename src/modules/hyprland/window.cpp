@@ -214,7 +214,7 @@ void Window::queryActiveWorkspace() {
   }
 }
 
-void Window::onEvent(const std::string& ev) {
+void Window::onEvent(const std::string_view& ev) {
   queryActiveWorkspace();
 
   dp.emit();

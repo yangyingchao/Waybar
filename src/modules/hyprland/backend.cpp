@@ -79,39 +79,63 @@ void IPC::startIPC() {
       return;
     }
 
-    auto* file = fdopen(socketfd, "r");
+    std::array<char, 1024> buffer;  // Hyprland socket2 events are max 1024 bytes
+    char* s = buffer.data();
+    char* r = s;
+    char* w = r;
 
     while (true) {
-      std::array<char, 1024> buffer;  // Hyprland socket2 events are max 1024 bytes
-
-      auto* receivedCharPtr = fgets(buffer.data(), buffer.size(), file);
-
-      if (receivedCharPtr == nullptr) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        continue;
+      auto ret = read(socketfd, w, buffer.end() - w);
+      if (ret == 0) {
+        spdlog::info("Stopping IPC message receiver.");
+        break;
       }
 
-      std::string messageReceived(buffer.data());
-      messageReceived = messageReceived.substr(0, messageReceived.find_first_of('\n'));
-      spdlog::debug("hyprland IPC received {}", messageReceived);
-
-      try {
-        parseIPC(messageReceived);
-      } catch (std::exception& e) {
-        spdlog::warn("Failed to parse IPC message: {}, reason: {}", messageReceived, e.what());
-      } catch (...) {
-        throw;
+      if (ret == -1) {
+        spdlog::error("Failed to read message: {}", strerror(errno));
+        break;
       }
 
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      auto* p = w;
+      w += ret;
+
+      spdlog::debug("BUFFER: {}", s);
+
+      while (p < w) {
+        if (*p == '\n') {
+          *p = '\0';
+          spdlog::debug("MSG: {}", r);
+
+          std::string_view messageReceived(r, p);
+          try {
+            parseIPC(messageReceived);
+          } catch (std::exception& e) {
+            spdlog::warn("Failed to parse IPC message: {}, reason: {}", messageReceived, e.what());
+          } catch (...) {
+            throw;
+          }
+
+          r = p + 1;
+        }
+        ++p;
+      }
+
+      // message is not complete, continue read.
+      if (r < w) {
+        memmove(s, r, w - r);
+        w = s + (w - r);
+        r = s;
+      } else {
+        w = s;
+        r = s;
+      }
     }
   }).detach();
 }
 
-void IPC::parseIPC(const std::string& ev) {
-  std::string request = ev.substr(0, ev.find_first_of('>'));
+void IPC::parseIPC(const std::string_view& ev) {
+  auto request = ev.substr(0, ev.find_first_of('>'));
   std::unique_lock lock(callbackMutex_);
-
   for (auto& [eventname, handler] : callbacks_) {
     if (eventname == request) {
       handler->onEvent(ev);

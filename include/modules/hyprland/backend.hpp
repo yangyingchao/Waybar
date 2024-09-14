@@ -13,7 +13,7 @@ namespace waybar::modules::hyprland {
 
 class EventHandler {
  public:
-  virtual void onEvent(const std::string& ev) = 0;
+  virtual void onEvent(const std::string_view& ev) = 0;
   virtual ~EventHandler() = default;
 };
 
@@ -33,7 +33,7 @@ class IPC {
 
  private:
   void startIPC();
-  void parseIPC(const std::string&);
+  void parseIPC(const std::string_view&);
 
   std::mutex callbackMutex_;
   util::JsonParser parser_;

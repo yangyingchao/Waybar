@@ -20,7 +20,7 @@ class Submap : public waybar::ALabel, public EventHandler {
 
  private:
   auto parseConfig(const Json::Value&) -> void;
-  void onEvent(const std::string& ev) override;
+  void onEvent(const std::string_view& ev) override;
 
   std::mutex mutex_;
   const Bar& bar_;

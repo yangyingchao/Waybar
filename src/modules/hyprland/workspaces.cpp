@@ -311,10 +311,10 @@ void Workspaces::loadPersistentWorkspacesFromWorkspaceRules(const Json::Value &c
   }
 }
 
-void Workspaces::onEvent(const std::string &ev) {
+void Workspaces::onEvent(const std::string_view &ev) {
   std::lock_guard<std::mutex> lock(m_mutex);
   std::string eventName(begin(ev), begin(ev) + ev.find_first_of('>'));
-  std::string payload = ev.substr(eventName.size() + 2);
+  std::string payload = std::string(ev.substr(eventName.size() + 2));
 
   if (eventName == "workspace") {
     onWorkspaceActivated(payload);
@@ -590,8 +590,8 @@ auto Workspaces::populateIconsMap(const Json::Value &formatIcons) -> void {
   m_iconsMap.emplace("", "");
 }
 
-auto Workspaces::populateBoolConfig(const Json::Value &config, const std::string &key, bool &member)
-    -> void {
+auto Workspaces::populateBoolConfig(const Json::Value &config, const std::string &key,
+                                    bool &member) -> void {
   const auto &configValue = config[key];
   if (configValue.isBool()) {
     member = configValue.asBool();

@@ -47,7 +47,7 @@ class Workspaces : public AModule, public EventHandler {
   bool windowRewriteConfigUsesTitle() const { return m_anyWindowRewriteRuleUsesTitle; }
 
  private:
-  void onEvent(const std::string& e) override;
+  void onEvent(const std::string_view& e) override;
   void updateWindowCount();
   void sortWorkspaces();
   void createWorkspace(Json::Value const& workspace_data,

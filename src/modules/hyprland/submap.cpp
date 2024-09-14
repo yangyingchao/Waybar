@@ -65,14 +65,14 @@ auto Submap::update() -> void {
   ALabel::update();
 }
 
-void Submap::onEvent(const std::string& ev) {
+void Submap::onEvent(const std::string_view& ev) {
   std::lock_guard<std::mutex> lg(mutex_);
 
   if (ev.find("submap") == std::string::npos) {
     return;
   }
 
-  auto submapName = ev.substr(ev.find_last_of('>') + 1);
+  auto submapName = std::string(ev.substr(ev.find_last_of('>') + 1));
   submapName = waybar::util::sanitize_string(submapName);
 
   if (!submap_.empty()) {
