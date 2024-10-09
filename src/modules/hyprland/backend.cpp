@@ -55,6 +55,7 @@ void IPC::startIPC() {
 
     if (!modulesReady) return;
 
+    pthread_setname_np(pthread_self(), "HyprlandIPC");
     spdlog::info("Hyprland IPC starting");
 
     struct sockaddr_un addr;
@@ -73,22 +74,23 @@ void IPC::startIPC() {
     addr.sun_path[sizeof(addr.sun_path) - 1] = 0;
 
     int l = sizeof(struct sockaddr_un);
-
-    if (connect(socketfd, (struct sockaddr*)&addr, l) == -1) {
-      spdlog::error("Hyprland IPC: Unable to connect?");
-      return;
-    }
-
     std::array<char, 1024> buffer;  // Hyprland socket2 events are max 1024 bytes
     char* s = buffer.data();
     char* r = s;
     char* w = r;
 
+
+    reconnet:
+    if (connect(socketfd, (struct sockaddr*)&addr, l) == -1) {
+      spdlog::error("Hyprland IPC: Unable to connect: {}", strerror(errno));
+      return;
+    }
+
     while (true) {
       auto ret = read(socketfd, w, buffer.end() - w);
       if (ret == 0) {
-        spdlog::info("Stopping IPC message receiver.");
-        break;
+        spdlog::info("Reconnecting IPC message receiver.");
+        goto reconnet;
       }
 
       if (ret == -1) {
@@ -130,6 +132,10 @@ void IPC::startIPC() {
         r = s;
       }
     }
+
+    char name[16];
+    pthread_getname_np(pthread_self(), name, 16);
+    spdlog::info("Thread {} is going to quit", name);
   }).detach();
 }
 
