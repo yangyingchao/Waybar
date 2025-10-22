@@ -106,102 +106,10 @@ void IPC::parseIPC(const std::string &line) {
   {
     auto lock = lockData();
 
-    if (const auto &payload = ev["WorkspacesChanged"]) {
-      workspaces_.clear();
-      const auto &values = payload["workspaces"];
-      std::ranges::copy(values, std::back_inserter(workspaces_));
-
-      std::ranges::sort(workspaces_, [](const auto &a, const auto &b) {
-        const auto &aOutput = a["output"].asString();
-        const auto &bOutput = b["output"].asString();
-        const auto aIdx = a["idx"].asUInt();
-        const auto bIdx = b["idx"].asUInt();
-        if (aOutput == bOutput) return aIdx < bIdx;
-        return aOutput < bOutput;
-      });
-    } else if (const auto &payload = ev["WorkspaceActivated"]) {
-      const auto id = payload["id"].asUInt64();
-      const auto focused = payload["focused"].asBool();
-      auto it = std::ranges::find_if(workspaces_,
-                                     [id](const auto &ws) { return ws["id"].asUInt64() == id; });
-      if (it != workspaces_.end()) {
-        const auto &ws = *it;
-        const auto &output = ws["output"].asString();
-        for (auto &ws : workspaces_) {
-          const auto got_activated = (ws["id"].asUInt64() == id);
-          if (ws["output"] == output) ws["is_active"] = got_activated;
-
-          if (focused) ws["is_focused"] = got_activated;
-        }
-      } else {
-        spdlog::error("Activated unknown workspace");
-      }
-    } else if (const auto &payload = ev["WorkspaceActiveWindowChanged"]) {
-      const auto workspaceId = payload["workspace_id"].asUInt64();
-      auto it = std::ranges::find_if(workspaces_, [workspaceId](const auto &ws) {
-        return ws["id"].asUInt64() == workspaceId;
-      });
-      if (it != workspaces_.end()) {
-        auto &ws = *it;
-        ws["active_window_id"] = payload["active_window_id"];
-      } else {
-        spdlog::error("Active window changed on unknown workspace");
-      }
-    } else if (const auto &payload = ev["WorkspaceUrgencyChanged"]) {
-      const auto id = payload["id"].asUInt64();
-      const auto urgent = payload["urgent"].asBool();
-      auto it = std::ranges::find_if(workspaces_,
-                                     [id](const auto &ws) { return ws["id"].asUInt64() == id; });
-      if (it != workspaces_.end()) {
-        auto &ws = *it;
-        ws["is_urgent"] = urgent;
-      } else {
-        spdlog::error("Urgency changed for unknown workspace");
-      }
-    } else if (const auto &payload = ev["KeyboardLayoutsChanged"]) {
-      const auto &layouts = payload["keyboard_layouts"];
-      const auto &names = layouts["names"];
-      keyboardLayoutCurrent_ = layouts["current_idx"].asUInt();
-
-      keyboardLayoutNames_.clear();
-      for (const auto &fullName : names) keyboardLayoutNames_.push_back(fullName.asString());
-    } else if (const auto &payload = ev["KeyboardLayoutSwitched"]) {
-      keyboardLayoutCurrent_ = payload["idx"].asUInt();
-    } else if (const auto &payload = ev["WindowsChanged"]) {
-      windows_.clear();
-      const auto &values = payload["windows"];
-      std::ranges::copy(values, std::back_inserter(windows_));
-    } else if (const auto &payload = ev["WindowOpenedOrChanged"]) {
-      const auto &window = payload["window"];
-      const auto id = window["id"].asUInt64();
-      auto it = std::ranges::find_if(windows_,
-                                     [id](const auto &win) { return win["id"].asUInt64() == id; });
-      if (it == windows_.end()) {
-        windows_.push_back(window);
-
-        if (window["is_focused"].asBool()) {
-          for (auto &win : windows_) {
-            win["is_focused"] = win["id"].asUInt64() == id;
-          }
-        }
-      } else {
-        *it = window;
-      }
-    } else if (const auto &payload = ev["WindowClosed"]) {
-      const auto id = payload["id"].asUInt64();
-      auto it = std::ranges::find_if(windows_,
-                                     [id](const auto &win) { return win["id"].asUInt64() == id; });
-      if (it != windows_.end()) {
-        windows_.erase(it);
-      } else {
-        spdlog::error("Unknown window closed");
-      }
-    } else if (const auto &payload = ev["WindowFocusChanged"]) {
-      const auto focused = !payload["id"].isNull();
-      const auto id = payload["id"].asUInt64();
-      for (auto &win : windows_) {
-        win["is_focused"] = focused && win["id"].asUInt64() == id;
-      }
+    const auto &event_name = members[0];
+    auto it = parsers_.find(event_name);
+    if (it != end_) {
+      it->second(ev[event_name]);
     }
   }
 
@@ -267,6 +175,128 @@ Json::Value IPC::send(const Json::Value &request) {
   Json::Value response;
   iss >> response;
   return response;
+}
+
+void IPC::setupMessageParsers() {
+  // Note: parsers are called with dataMutex_ held.
+  parsers_ = {
+      {"WorkspacesChanged",
+       [&](const Json::Value &payload) {
+         workspaces_.clear();
+         const auto &values = payload["workspaces"];
+         std::ranges::copy(values, std::back_inserter(workspaces_));
+
+         std::ranges::sort(workspaces_, [](const auto &a, const auto &b) {
+           const auto &aOutput = a["output"].asString();
+           const auto &bOutput = b["output"].asString();
+           const auto aIdx = a["idx"].asUInt();
+           const auto bIdx = b["idx"].asUInt();
+           if (aOutput == bOutput) return aIdx < bIdx;
+           return aOutput < bOutput;
+         });
+       }},
+      {"WorkspaceActivated",
+       [&](const Json::Value &payload) {
+         const auto id = payload["id"].asUInt64();
+         const auto focused = payload["focused"].asBool();
+         auto it = std::ranges::find_if(workspaces_,
+                                        [id](const auto &ws) { return ws["id"].asUInt64() == id; });
+         if (it != workspaces_.end()) {
+           const auto &ws = *it;
+           const auto &output = ws["output"].asString();
+           for (auto &ws : workspaces_) {
+             const auto got_activated = (ws["id"].asUInt64() == id);
+             if (ws["output"] == output) ws["is_active"] = got_activated;
+
+             if (focused) ws["is_focused"] = got_activated;
+           }
+         } else {
+           spdlog::error("Activated unknown workspace");
+         }
+       }},
+      {"WorkspaceActiveWindowChanged",
+       [&](const Json::Value &payload) {
+         const auto workspaceId = payload["workspace_id"].asUInt64();
+         auto it = std::ranges::find_if(workspaces_, [workspaceId](const auto &ws) {
+           return ws["id"].asUInt64() == workspaceId;
+         });
+         if (it != workspaces_.end()) {
+           auto &ws = *it;
+           ws["active_window_id"] = payload["active_window_id"];
+         } else {
+           spdlog::error("Active window changed on unknown workspace");
+         }
+       }},
+      {"WorkspaceUrgencyChanged",
+       [&](const Json::Value &payload) {
+         const auto id = payload["id"].asUInt64();
+         const auto urgent = payload["urgent"].asBool();
+         auto it = std::ranges::find_if(workspaces_,
+                                        [id](const auto &ws) { return ws["id"].asUInt64() == id; });
+         if (it != workspaces_.end()) {
+           auto &ws = *it;
+           ws["is_urgent"] = urgent;
+         } else {
+           spdlog::error("Urgency changed for unknown workspace");
+         }
+       }},
+      {"KeyboardLayoutsChanged",
+       [&](const Json::Value &payload) {
+         const auto &layouts = payload["keyboard_layouts"];
+         const auto &names = layouts["names"];
+         keyboardLayoutCurrent_ = layouts["current_idx"].asUInt();
+
+         keyboardLayoutNames_.clear();
+         for (const auto &fullName : names) keyboardLayoutNames_.push_back(fullName.asString());
+       }},
+      {"KeyboardLayoutSwitched",
+       [&](const Json::Value &payload) { keyboardLayoutCurrent_ = payload["idx"].asUInt(); }},
+      {"WindowsChanged",
+       [&](const Json::Value &payload) {
+         windows_.clear();
+         const auto &values = payload["windows"];
+         std::ranges::copy(values, std::back_inserter(windows_));
+       }},
+      {"WindowOpenedOrChanged",
+       [&](const Json::Value &payload) {
+         const auto &window = payload["window"];
+         const auto id = window["id"].asUInt64();
+         auto it = std::ranges::find_if(
+             windows_, [id](const auto &win) { return win["id"].asUInt64() == id; });
+         if (it == windows_.end()) {
+           windows_.push_back(window);
+
+           if (window["is_focused"].asBool()) {
+             for (auto &win : windows_) {
+               win["is_focused"] = win["id"].asUInt64() == id;
+             }
+           }
+         } else {
+           *it = window;
+         }
+       }},
+      {"WindowClosed",
+       [&](const Json::Value &payload) {
+         const auto id = payload["id"].asUInt64();
+         auto it = std::ranges::find_if(
+             windows_, [id](const auto &win) { return win["id"].asUInt64() == id; });
+         if (it != windows_.end()) {
+           windows_.erase(it);
+         } else {
+           spdlog::error("Unknown window closed");
+         }
+       }},
+      {"WindowFocusChanged",
+       [&](const Json::Value &payload) {
+         const auto focused = !payload["id"].isNull();
+         const auto id = payload["id"].asUInt64();
+         for (auto &win : windows_) {
+           win["is_focused"] = focused && win["id"].asUInt64() == id;
+         }
+       }},
+  };
+
+  end_ = parsers_.cend();
 }
 
 }  // namespace waybar::modules::niri

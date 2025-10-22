@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <list>
 #include <mutex>
 #include <string>
@@ -17,7 +18,10 @@ class EventHandler {
 
 class IPC {
  public:
-  IPC() { startIPC(); }
+  IPC() {
+    setupMessageParsers();
+    startIPC();
+  }
 
   void registerForIPC(const std::string& ev, EventHandler* ev_handler);
   void unregisterForIPC(EventHandler* handler);
@@ -33,6 +37,8 @@ class IPC {
 
  private:
   void startIPC();
+  void setupMessageParsers();
+
   static int connectToSocket();
   void parseIPC(const std::string&);
 
@@ -45,6 +51,11 @@ class IPC {
   util::JsonParser parser_;
   std::mutex callbackMutex_;
   std::list<std::pair<std::string, EventHandler*>> callbacks_;
+
+  using parser_function = std::function<void(const Json::Value&)>;
+  using parser_map = std::map<std::string, parser_function>;
+  parser_map  parsers_;
+  parser_map::const_iterator end_;
 };
 
 inline std::unique_ptr<IPC> gIPC;
