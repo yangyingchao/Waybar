@@ -4,6 +4,7 @@
 #include <gdk/gdk.h>
 #include <gdk/gdkwayland.h>
 #include <wayland-client.h>
+#include <unordered_set>
 
 #include "bar.hpp"
 #include "config.hpp"
@@ -56,6 +57,7 @@ class Client {
   std::list<struct waybar_output> outputs_;
   std::unique_ptr<CssReloadHelper> m_cssReloadHelper;
   std::string m_cssFile;
+  std::unordered_set<std::string> m_monitors_inprocess;
   sigc::connection monitor_added_connection_;
   sigc::connection monitor_removed_connection_;
 };
